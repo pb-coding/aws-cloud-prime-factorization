@@ -1,80 +1,91 @@
-# Cloud Prime Factorization
+# Cloud Prime Factorization with AWS
 
-Inspired by https://github.com/eniac/faas and https://gitlab.inria.fr/cado-nfs/cado-nfs
+Inspired by [eniac/faas](https://github.com/eniac/faas) and [cado-nfs](https://gitlab.inria.fr/cado-nfs/cado-nfs)
 
-This repo lays out how to successfully factorize numbers up to 512 bits using cloud computing. This implementation uses DigitalOcean, but it should be very easy to change providers in the Terraform configuration.
+This repository sets up a cluster on AWS to factorize large numbers (up to 512 bits) using [cado-nfs](https://gitlab.inria.fr/cado-nfs/cado-nfs/). The Terraform configuration will build 1 master node and 8 worker nodes, all running in AWS. Each node will have a large compute-optimized instance type (e.g., `c5.12xlarge`) to speed up factorization.
 
-The setup of this repo is 1 master node and 8 worker nodes on DigitalOcean. Each node has 48 CPUs and 96 GB memory. The overview of the process is as follows:
+## Overview of the Process
 
-1. Setup the infrastructure.
-2. Run cado-nfs and wait.
-3. Enjoy your new-found primes.
+1. Configure your AWS credentials and variables.
+2. Use Terraform to set up the infrastructure.
+3. Run cado-nfs from the master node to factorize your target number.
+4. Wait for the factorization to complete, then retrieve your prime factors.
+
+## Requirements
+
+- [Terraform](https://www.terraform.io/) installed on your local machine.
+- An AWS account and access credentials (Access Key, Secret Key).
+- An existing SSH key pair on your local machine (e.g., `~/.ssh/my-admin-key` and `~/.ssh/my-admin-key.pub`). The public key will be uploaded to AWS so you can SSH into the instances.
 
 ## Setting up Infrastructure
 
-These commands assume you're on Linux, have already installed [Terraform](https://www.terraform.io/), and are working in the `terraform` directory.
+1. **Set up your SSH key pair:**  
+   Ensure you have a public key file at `~/.ssh/my-admin-key.pub`. If not, create one:
+   ```sh
+   ssh-keygen -t rsa -b 4096 -C "your_email@example.com" -f ~/.ssh/my-admin-key
 
-First, copy `terraform.tfvars.defaults` to `terraform.tfvars`. Open `terraform.tfvars`, then:
+2. **Configure Terraform variables:**
+    Copy terraform.tfvars.defaults to terraform.tfvars (if provided) or create your own terraform.tfvars.
 
-1. Enter your DigitalOcean auth token.
-2. Change the DigitalOcean region.
-3. Enter the number you want to factorize. Feel free to use the default prime to test. It should only take 5 minutes or so with this setup.
+    In terraform.tfvars, set:
+    ```sh
+    aws_access_key     = "YOUR_ACCESS_KEY"
+    aws_secret_key     = "YOUR_SECRET_KEY"
+    aws_region         = "us-east-1"   # or your preferred region
+    number_to_factor   = 90377629292003121684002147101760858109247336549001090677693
+    my_ip              = "203.0.113.25/32"  # Replace with your actual public IP
 
-Now we can create the infrastructure. This will take a while as cado-nfs will need to build.
+3. **Initialize and apply Terraform:**
+    ```sh
+    terraform init
+    terraform apply
+    
+4. **Terraform will provision:**
 
-```sh
-terraform init
-terraform apply
-```
-
-Save the SSH keys:
-
-```sh
-terraform output -raw admin_private_key > ~/.ssh/cado
-terraform output -raw admin_public_key > ~/.ssh/cado.pub
-chmod 600 ~/.ssh/cado
-chmod 644 ~/.ssh/cado.pub
-```
+    One master EC2 instance.
+    Eight worker EC2 instances.
+    A security group allowing SSH from your IP and internal communication between instances.
+    Automatically download and compile cado-nfs on the master and worker instances.
+    Note: The chosen AMI and instance types must be available in your selected AWS region. Adjust them if needed.
 
 ## Running cado-nfs
+    Get the cado-nfs command: After terraform apply finishes, run:
+    ```sh
+    terraform output master_command
+    
 
-First, get the cado-nfs run command that Terraform automatically generates.
+This outputs the exact command you’ll run on the master node to start cado-nfs.
 
-```sh
-terraform output master_command
-```
+SSH into the master instance: Obtain the master’s IP:
 
-Then SSH into the master server (replace `<master_ip>`). I highly recommend leaving the ServerAliveInterval and ServerAliveCountMax configurations as is.
-While cado-nfs technically has the ability to be interrupted, my SSH session has died and caused failures in factorizing primes.
+    terraform output master_ip
 
-```sh
-ssh -i ~/.ssh/cado -o "ServerAliveInterval 60" -o "ServerAliveCountMax 120" root@<master_ip>
-```
+For Ubuntu-based AMIs:
 
-Enter the cado-nfs directory:
+    ssh -i ~/.ssh/my-admin-key -o "ServerAliveInterval 60" -o "ServerAliveCountMax 120" ubuntu@<master_ip>
 
-```sh
-cd /root/cado-nfs
-```
+Once logged in:
 
-Run cado-nfs using the generated command. It will look something like this:
+    cd /root/cado-nfs
 
-```sh
-./cado-nfs.py <number_to_factor> \
-    server.address=<master_ip_internal> \
-    tasks.workdir=/tmp/c100 \
-    slaves.hostnames=<worker_ips_internal> \
-    slaves.scriptpath=/root/cado-nfs/ \
-    --slaves 24 \
-    --client-threads 2
-```
+Run the factorization: Use the command from terraform output master_command. It will look like:
 
-Immediately, cado-nfs will output a command that looks like the following. Make sure to copy and save it in case cado-nfs is interrupted.
+    ./cado-nfs.py <number_to_factor> \
+        server.address=<master_private_ip> \
+        tasks.workdir=/tmp/c100 \
+        slaves.hostnames=<worker_private_ips> \
+        slaves.scriptpath=/root/cado-nfs/ \
+        --slaves 24 \
+        --client-threads 2
+The command is pre-populated with correct IPs by Terraform.
 
-```sh
-./cado-nfs.py /tmp/c100/c155.parameters_snapshot.0
-```
+Monitoring and Completion:
 
-Now you wait and eventually the program will output the prime factors of the number you entered. When running this setup, it took roughly 6 hours to prime factorize my 512-bit RSA modulus.
+The process may take several hours, depending on the instance type and the number's complexity.
+If cado-nfs gets interrupted, it will print a snapshot command you can use to resume the factorization.
+When completed, cado-nfs prints out the prime factors.
 
-At the time of creating this repo, the total cost to factorize a 512-bit number was $72 (6 hours * 9 servers * $1.5/hour/server). Thank you DigitalOcean for the free credits :)
+## Clean Up
+When you're done, destroy the infrastructure to avoid further costs:
+
+    terraform destroy
