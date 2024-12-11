@@ -1,5 +1,7 @@
-aws_access_key = "your_access_key"
-aws_secret_key = "your_secret_key"
-aws_region     = "your_region"
-my_ip = "your_ip/32"
-number_to_factor = 90377629292003121684002147101760858109247336549001090677693
+aws_region     = "eu-central-1"
+my_ip = "0.0.0.0/0"
+aws_instance_type = "t3.large"
+number_of_workers = 2
+number_of_slaves = 4
+number_of_threads = 2
+number_to_factor = 90377629292003121684002147101760858109247336549001090677692

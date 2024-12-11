@@ -24,7 +24,7 @@ data "aws_vpc" "default" {
 # Create master server
 resource "aws_instance" "master" {
   ami                    = "ami-066902f7df67250f8"
-  instance_type          = "t3.large"
+  instance_type          = var.aws_instance_type
   key_name               = aws_key_pair.admin.key_name
   associate_public_ip_address = true
   vpc_security_group_ids = [aws_security_group.default.id]
@@ -70,9 +70,9 @@ resource "aws_instance" "master" {
 
 # Create worker servers
 resource "aws_instance" "worker" {
-  count         = 2
+  count         = var.number_of_workers
   ami           = "ami-066902f7df67250f8"
-  instance_type = "t3.large"
+  instance_type = var.aws_instance_type
   key_name      = aws_key_pair.admin.key_name
   associate_public_ip_address = true
   vpc_security_group_ids = [aws_security_group.default.id]

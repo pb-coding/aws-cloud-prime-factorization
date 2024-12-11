@@ -14,10 +14,11 @@ output "master_command" {
   value = <<EOL
 ./cado-nfs.py ${var.number_to_factor} \
     server.address=${aws_instance.master.private_ip} \
-    tasks.workdir=/tmp/c100 \
-    slaves.hostnames=${join(",", [for w in aws_instance.worker : "ubuntu@${w.private_ip}"])} \
-    slaves.scriptpath=/root/cado-nfs/ \
-    --slaves 4 \
-    --client-threads 2
+    tasks.workdir=/home/ubuntu/cado-nfs-workdir \
+    tasks.execpath=/home/ubuntu/cado-nfs/build \
+    slaves.hostnames=${join(",", [for w in aws_instance.worker : "${w.private_ip}"])} \
+    slaves.scriptpath=/home/ubuntu/cado-nfs/ \
+    --slaves ${var.number_of_slaves} \
+    --client-threads ${var.number_of_threads}
 EOL
 }
