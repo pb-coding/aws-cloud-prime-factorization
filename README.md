@@ -29,11 +29,16 @@ This repository sets up a cluster on AWS to factorize large numbers (up to 512 b
 
     In terraform.tfvars, set:
     ```sh
-    aws_access_key     = "YOUR_ACCESS_KEY"
-    aws_secret_key     = "YOUR_SECRET_KEY"
-    aws_region         = "us-east-1"   # or your preferred region
-    number_to_factor   = 90377629292003121684002147101760858109247336549001090677693
-    my_ip              = "203.0.113.25/32"  # Replace with your actual public IP
+    aws_region     = "eu-central-1"
+    my_ip = "0.0.0.0/0"
+    aws_instance_type = "t3.large"
+    number_of_workers = 2
+    number_of_slaves = 4
+    number_of_threads = 2
+    number_to_factor = 90377629292003121684002147101760858109247336549001090677692
+
+3. **Authenticate with AWS**
+Authenticate with AWS CLI and ensure ~/.aws/credentials is set. Terraform will use these values.
 
 3. **Initialize and apply Terraform:**
     ```sh
@@ -49,7 +54,7 @@ This repository sets up a cluster on AWS to factorize large numbers (up to 512 b
     Note: The chosen AMI and instance types must be available in your selected AWS region. Adjust them if needed.
 
 ## Running cado-nfs
-    Get the cado-nfs command: After terraform apply finishes, run:
+Get the cado-nfs command: After terraform apply finishes, run:
     ```sh
     terraform output master_command
     

@@ -23,9 +23,9 @@ data "aws_vpc" "default" {
 
 # Create master server
 resource "aws_instance" "master" {
-  ami           = "ami-066902f7df67250f8"
-  instance_type = "t3.small"
-  key_name = aws_key_pair.admin.key_name
+  ami                    = "ami-066902f7df67250f8"
+  instance_type          = "t3.large"
+  key_name               = aws_key_pair.admin.key_name
   associate_public_ip_address = true
   vpc_security_group_ids = [aws_security_group.default.id]
 
@@ -47,19 +47,32 @@ resource "aws_instance" "master" {
         # Optional dependencies
         apt-get install -y libomp-dev
 
+        # Ensure SSH private key is available
+        mkdir -p /home/ubuntu/.ssh
+        echo "${file("~/.ssh/my-admin-key")}" > /home/ubuntu/.ssh/id_rsa
+        chmod 600 /home/ubuntu/.ssh/id_rsa
+        chown -R ubuntu:ubuntu /home/ubuntu/.ssh
+
+        # Add the SSH private key to the SSH agent
+        eval $(ssh-agent -s)
+        ssh-add /home/ubuntu/.ssh/id_rsa
+
+        # Disable strict host key checking
+        echo "StrictHostKeyChecking no" >> /etc/ssh/ssh_config
+
         # Clone and build CADO-NFS
-        git clone https://gitlab.inria.fr/cado-nfs/cado-nfs.git /root/cado-nfs
-        cd /root/cado-nfs
-        cmake -S . -B build
-        cmake --build build
-    EOF
+        su - ubuntu -c "git clone https://gitlab.inria.fr/cado-nfs/cado-nfs.git /home/ubuntu/cado-nfs"
+        su - ubuntu -c "cd /home/ubuntu/cado-nfs && cmake -S . -B build && cmake --build build"
+
+        su - ubuntu -c "touch /home/ubuntu/done"
+  EOF
 }
 
 # Create worker servers
 resource "aws_instance" "worker" {
   count         = 2
   ami           = "ami-066902f7df67250f8"
-  instance_type = "t3.small"
+  instance_type = "t3.large"
   key_name      = aws_key_pair.admin.key_name
   associate_public_ip_address = true
   vpc_security_group_ids = [aws_security_group.default.id]
@@ -82,12 +95,26 @@ resource "aws_instance" "worker" {
         # Optional dependencies
         apt-get install -y libomp-dev
 
+        # Add public key to authorized_keys
+        mkdir -p /home/ubuntu/.ssh
+        echo "${file("~/.ssh/my-admin-key.pub")}" >> /home/ubuntu/.ssh/authorized_keys
+        chmod 600 /home/ubuntu/.ssh/authorized_keys
+        chmod 700 /home/ubuntu/.ssh
+        chown -R ubuntu:ubuntu /home/ubuntu/.ssh
+
+        # Disable strict host key checking
+        echo "StrictHostKeyChecking no" >> /etc/ssh/ssh_config
+
         # Clone and build CADO-NFS
-        git clone https://gitlab.inria.fr/cado-nfs/cado-nfs.git /root/cado-nfs
-        cd /root/cado-nfs
-        cmake -S . -B build
-        cmake --build build
-    EOF
+        su - ubuntu -c "git clone https://gitlab.inria.fr/cado-nfs/cado-nfs.git /home/ubuntu/cado-nfs"
+        su - ubuntu -c "cd /home/ubuntu/cado-nfs && cmake -S . -B build && cmake --build build"
+
+        # Ensure cado-nfs-client.py is executable
+        su - ubuntu -c "chmod +x /home/ubuntu/cado-nfs/cado-nfs-client.py"
+
+        # Mark cloning as complete
+        su - ubuntu -c "touch /home/ubuntu/done"
+  EOF
 }
 
 resource "aws_security_group" "default" {
